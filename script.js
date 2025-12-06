@@ -82,14 +82,21 @@ document.addEventListener("DOMContentLoaded", function initSlider() {
 
   if (!sliderTrack || slides.length === 0) return;
 
-  let currentIndex = 1;
-  const slideWidth = 542;
-  const slideGap = 24;
+  let currentIndex = 0;
   const totalSlides = slides.length;
+
+  function getSlideMetrics() {
+    const firstSlide = slides[0];
+    const slideWidth = firstSlide.offsetWidth;
+    const trackStyle = window.getComputedStyle(sliderTrack);
+    const slideGap = parseInt(trackStyle.gap) || 24;
+    return { slideWidth, slideGap };
+  }
 
   function updateSlider() {
     const wrapper = sliderTrack.closest(".slider-wrapper");
     const wrapperWidth = wrapper.offsetWidth;
+    const { slideWidth, slideGap } = getSlideMetrics();
     const slideFullWidth = slideWidth + slideGap;
     const slideCenterOffset = (wrapperWidth - slideWidth) / 2;
     const currentSlidePosition =
@@ -160,8 +167,18 @@ document.addEventListener("DOMContentLoaded", function initVideoModal() {
   }
 
   function closeModal() {
-    modal.classList.remove("active");
-    document.body.style.overflow = "";
+    // Check if mobile (bottom sheet animation)
+    if (window.innerWidth <= 768) {
+      modal.classList.add("closing");
+      // Wait for animation to complete before hiding
+      setTimeout(() => {
+        modal.classList.remove("active", "closing");
+        document.body.style.overflow = "";
+      }, 300);
+    } else {
+      modal.classList.remove("active");
+      document.body.style.overflow = "";
+    }
   }
 
   playBtns.forEach((btn) => {
@@ -415,22 +432,46 @@ document.addEventListener("DOMContentLoaded", function initRangeSlider() {
     return num.toString().replace(/\d/g, (d) => persianDigits[d]);
   }
 
+  function isMobile() {
+    return window.innerWidth <= 768;
+  }
+
   function updateSlider(value) {
     const percentage = ((value - min) / (max - min)) * 100;
-
-    rangeTrackFill.style.width = `${percentage}%`;
-
     const track = document.querySelector(".range-track");
     const trackRect = track.getBoundingClientRect();
     const sliderWrapper = document.querySelector(".range-slider-wrapper");
     const wrapperRect = sliderWrapper.getBoundingClientRect();
 
-    // RTL positioning: at min value thumb is at right, at max value thumb is at left
-    const trackLeftInWrapper = trackRect.left - wrapperRect.left;
-    const thumbLeft =
-      trackLeftInWrapper + trackRect.width * (1 - percentage / 100) - 6;
+    if (isMobile()) {
+      // Mobile: Vertical slider
+      // Fill from bottom (min) to current value
+      rangeTrackFill.style.width = "100%";
+      rangeTrackFill.style.height = `${percentage}%`;
 
-    rangeThumb.style.left = `${thumbLeft}px`;
+      // Thumb position: bottom = min (10), top = max (100)
+      const trackTopInWrapper = trackRect.top - wrapperRect.top;
+      const thumbTop =
+        trackTopInWrapper + trackRect.height * (1 - percentage / 100) - 6;
+
+      rangeThumb.style.left = "50%";
+      rangeThumb.style.top = `${thumbTop}px`;
+      rangeThumb.style.transform = "translateX(-50%)";
+    } else {
+      // Desktop: Horizontal slider (RTL)
+      rangeTrackFill.style.width = `${percentage}%`;
+      rangeTrackFill.style.height = "";
+
+      // RTL positioning: at min value thumb is at right, at max value thumb is at left
+      const trackLeftInWrapper = trackRect.left - wrapperRect.left;
+      const thumbLeft =
+        trackLeftInWrapper + trackRect.width * (1 - percentage / 100) - 6;
+
+      rangeThumb.style.left = `${thumbLeft}px`;
+      rangeThumb.style.top = "";
+      rangeThumb.style.transform = "";
+    }
+
     rangeValue.textContent = toPersianDigits(value);
   }
 
@@ -450,12 +491,20 @@ document.addEventListener("DOMContentLoaded", function initRangeSlider() {
 
     const track = document.querySelector(".range-track");
     const trackRect = track.getBoundingClientRect();
-    const mouseX = e.clientX - trackRect.left;
 
-    // RTL: left edge = max value, right edge = min value
-    let percentage = (1 - mouseX / trackRect.width) * 100;
+    let percentage;
+
+    if (isMobile()) {
+      // Mobile: Vertical - top = max, bottom = min
+      const mouseY = e.clientY - trackRect.top;
+      percentage = (1 - mouseY / trackRect.height) * 100;
+    } else {
+      // Desktop: Horizontal RTL - left = max, right = min
+      const mouseX = e.clientX - trackRect.left;
+      percentage = (1 - mouseX / trackRect.width) * 100;
+    }
+
     percentage = Math.max(0, Math.min(100, percentage));
-
     const value = Math.round(min + (percentage / 100) * (max - min));
 
     rangeInput.value = value;
@@ -477,11 +526,20 @@ document.addEventListener("DOMContentLoaded", function initRangeSlider() {
     const touch = e.touches[0];
     const track = document.querySelector(".range-track");
     const trackRect = track.getBoundingClientRect();
-    const touchX = touch.clientX - trackRect.left;
 
-    let percentage = (1 - touchX / trackRect.width) * 100;
+    let percentage;
+
+    if (isMobile()) {
+      // Mobile: Vertical - top = max, bottom = min
+      const touchY = touch.clientY - trackRect.top;
+      percentage = (1 - touchY / trackRect.height) * 100;
+    } else {
+      // Desktop: Horizontal RTL
+      const touchX = touch.clientX - trackRect.left;
+      percentage = (1 - touchX / trackRect.width) * 100;
+    }
+
     percentage = Math.max(0, Math.min(100, percentage));
-
     const value = Math.round(min + (percentage / 100) * (max - min));
 
     rangeInput.value = value;
@@ -490,6 +548,11 @@ document.addEventListener("DOMContentLoaded", function initRangeSlider() {
 
   document.addEventListener("touchend", () => {
     isDragging = false;
+  });
+
+  // Update on resize to handle orientation changes
+  window.addEventListener("resize", () => {
+    updateSlider(parseInt(rangeInput.value));
   });
 
   tooltipBtn?.addEventListener("click", (e) => {
